@@ -13,5 +13,6 @@ bun init
 bun add Leaflet
 # import L from "leaflet"
 # import "leaflet/dist/leaflet.css
+# Export { Mapper };
 bun build --production --minify --outdir=our index.js
 ```

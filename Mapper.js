@@ -32,12 +32,11 @@ class Mapper {
             create_div = true,
             div_id = "map-display-div-id",
             rate_limit_ms = 1000,
-            locate_on_start=false
+            locate_on_start = false,
+            lookup_api = "https://<API-HERE>"
         } = config;
 
-        
         this.locate_on_start = locate_on_start;
-        
         
         this.coord_config = coord;
     
@@ -61,7 +60,7 @@ class Mapper {
         `;
 
         // API URL for geocoding
-        this.lookup_api = "https://<API-HERE>"
+        this.lookup_api = lookup_api
 
         this.map_display_div_id = div_id;
 

@@ -8,7 +8,7 @@
  *          lat (float): inital map latitude
  *          long (float): inital map longitude
  *          zoom (float): inital zoom
- *          maker_list ( list [ list [lat, long], ... ] ): inital marker list to use
+ *          marker_list ( list [ list [lat, long], ... ] ): inital marker list to use
  * 
  *  Usage:
  *      Basic:
@@ -16,7 +16,7 @@
  *              await new Mapper({
  *                  coord: {lat:0, long:0},
  *                  zoom: 13, 
- *                  marker_list: [{"address", "Place"}, {"lat": 0, "long": 0}]
+ *                  marker_list: {{"address", "Place"}, ... ]
  *              }).draw();
  *          })();
  *      Locate Icon:
@@ -34,13 +34,18 @@ class Mapper {
             rate_limit_ms = 1000,
             locate_on_start=false
         } = config;
+
         
         this.locate_on_start = locate_on_start;
-
-        this.lat = coord.lat;
-        this.long = coord.long;
         
+        
+        this.coord_config = coord;
+    
+        this.lat = coord.lat || 0;
+        this.long = coord.long || 0;
         this.zoom = zoom;
+        
+
         this.marker_list = marker_list;
         this.map = null;
 
@@ -55,15 +60,16 @@ class Mapper {
             margin: 0;
         `;
 
+        // API URL for geocoding
+        this.lookup_api = "https://<API-HERE>"
+
         this.map_display_div_id = div_id;
 
         // Wether to automatically create div element in html body
         this.create_div = create_div;
         
+        // Rate limit API calls
         this.last_geocode_time = 0;
-        
-        // Must be >= 1000 ms
-        if ( rate_limit_ms < 1000 ) rate_limit_ms = 1000;
         this.min_geocode_interval = rate_limit_ms;
         
     }
@@ -90,6 +96,14 @@ class Mapper {
     }
 
     async #draw_map() {
+        if (this.coord_config.address) {
+            const locations = await this.addr_to_coord(this.coord_config.address);
+            if (locations?.length > 0) {
+                this.lat = parseFloat(locations[0].lat);
+                this.long = parseFloat(locations[0].long);
+            }
+        }
+
         if ( this.create_div ) {
             let div = document.createElement('div');
             div.setAttribute('id', this.map_display_div_id);
@@ -115,7 +129,7 @@ class Mapper {
         if ( json_string === null ) {
             await this.#draw_map();
         } else {
-            await this.draw_from_json(json_string);
+            await this.#draw_from_json(json_string);
         }
         if ( this.locate_on_start ) { 
             await this.locate_user()
@@ -154,6 +168,11 @@ class Mapper {
     }
 
     async #add_marker_list(marker_list) {
+        /**  
+         * Take a list of markers and turn it into a list of Leaflet markers
+         * Args:
+         *      marker_list (list [ object {float, float}, ... ] ): {"lat": float, "long": float}
+        */
         if (!Array.isArray(marker_list)) {
             throw new Error('marker_list must be array');
         }
@@ -174,12 +193,17 @@ class Mapper {
     }
 
     async #process_marker(marker_data, index) {
-        // Validate input
+        /**  
+         * Take a list of markers and turn it into a list of Leaflet markers
+         * Args:
+         *      marker_data (list [ object {float, float}, ... ] ): [{"name", "lat": float, "long": float}]
+         *      index (int): index for error tracking
+        */
         if (!marker_data || typeof marker_data !== 'object') {
             throw new Error(`Marker ${index}: invalid marker data`);
         }
 
-        // Address lookup: {address: "123 Main St"}
+        // Address lookup
         if (marker_data.address) {
             if (!marker_data.address.trim()) {
                 throw new Error(`Marker ${index}: empty address`);
@@ -191,17 +215,17 @@ class Mapper {
             const markers = [];
             for (const loc of locations) {
                 const lat = parseFloat(loc.lat);
-                const lon = parseFloat(loc.lon);
-                if (isNaN(lat) || isNaN(lon)) continue;
-                const popup = loc.display_name || "None";
+                const long = parseFloat(loc.long);
+                if (isNaN(lat) || isNaN(long)) continue;
+                const popup = loc.name || "None";
                 markers.push(
-                    await this.#add_marker(lat, lon, marker_data.address, popup)
+                    await this.#add_marker(lat, long, marker_data.address, popup)
                 );
             }
             return markers;
         }
 
-        // Coordinate lookup: {lat, long, alt?, popup?, icon?}
+        // Coordinate lookup
         const {lat, long, alt = "Marker", popup = "", icon = {}} = marker_data;
         if (lat == null || long == null) {
             throw new Error(`Marker ${index}: missing lat/long or address`);
@@ -213,8 +237,11 @@ class Mapper {
     }
     
     async #draw_from_json(json_string) {
+        /**  
+         * Draw map from json config string
+        */
         try {
-            var map_conf = JSON.parse(json_string);
+            const map_conf = JSON.parse(json_string);
 
             this.lat = map_conf.position.lat;
             this.long = map_conf.position.long;
@@ -223,17 +250,16 @@ class Mapper {
             if ( map_conf.markers.length > 0 ) {
                 await this.#add_marker_list(map_conf.markers);
             }
+        } catch(e) {
+            console.error("Failed to parse/draw from JSON:", e.message);
+            throw e;
         }
-        catch {
-            console.warn("Invalid JSON Provided");
-        }
-    }
+    }   
 
-    async draw_from_json(json_string) {
-        await this.#draw_from_json(json_string);
-    }
-
-    async addr_to_coord(address, limit=1) {
+    async addr_to_coord(address, limit=1, timeout_ms=10000) {
+        /**  
+         * Convert text string address to gps coords 
+        */
         const now = Date.now();
         const elapsed = now - this.last_geocode_time;
         
@@ -246,15 +272,19 @@ class Mapper {
         
         if (!address?.trim()) throw new Error('Invalid address');
 
-        const url = `https://api.stadiamaps.com/geocoding/v1/search?text=${encodeURIComponent(address.trim())}`;
+        const search_results_limit = `&limit=${limit}`;
+        const geocoding_path = "/geocode?address=";
+        const url = `${this.lookup_api}${geocoding_path}${encodeURIComponent(address.trim())}${search_results_limit}`;
         
-        const response = await fetch(url, {
-            headers: {
-                "Authorization": `Stadia-Auth ${env.STAD_API_KEY}`
-            }
-        });
+        const controller = new AbortController();
+        const timeout_id = setTimeout(() => controller.abort(), timeout_ms);
+        
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout_id);
         
         if (!response.ok) throw new Error(`Geocoding failed: ${response.status}`);
+        
+        // Returns: [{"name":"", "lat":0, "long":0}, ... ]
         return response.json();
     }
 

@@ -82,15 +82,18 @@ public partial class MapView : ContentView
         return $$"""
             <!DOCTYPE html>
             <html>
-                <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-                <script src="mapper.js"></script>
-                <script type="module">
-                    import L from 'https://esm.sh/leaflet@1.9.4';
-                    var map = new Mapper();
-                    (async () => {
-                        await map.draw({{json_string}});
-                    })();
-                </script>
+              <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/tmpk13/Leaflet-Openstreetmap-Wrapper-For-Maui@v0.0.3/Min/mapper.css">
+              <script type="module">
+                import { Mapper } from 'https://cdn.jsdelivr.net/gh/tmpk13/Leaflet-Openstreetmap-Wrapper-For-Maui@v0.0.3/Min/mapper.min.js';
+                
+                new Mapper({
+                  coord: {lat: 40.7128, long: -74.0060},
+                  zoom: 13,
+                  marker_list: [
+                    {address: "New York City"}
+                  ]
+                }).draw();
+              </script>
             </html>
             """;
     }   

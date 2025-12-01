@@ -88,7 +88,7 @@ public partial class MapView : ContentView
                     import L from 'https://esm.sh/leaflet@1.9.4';
                     var map = new Mapper();
                     (async () => {
-                        await map.draw();
+                        await map.draw({{json_string}});
                     })();
                 </script>
             </html>

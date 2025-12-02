@@ -33,8 +33,17 @@ class Mapper {
             div_id = "map-display-div-id",
             rate_limit_ms = 1000,
             locate_on_start = false,
-            lookup_api = "https://<API-HERE>"
+            lookup_api = "https://<API-HERE>",
+            marker_icon_config = {
+                icon_url:"https://github.com/tmpk13/Leaflet-Openstreetmap-Wrapper-For-Maui/blob/main/PingLong.png?raw=true", 
+                icon_x:35, 
+                icon_y:70, 
+                icon_w:70, 
+                icon_h:70
+            }
         } = config;
+
+        this.marker_icon_config = marker_icon_config
 
         this.locate_on_start = locate_on_start;
         
@@ -49,15 +58,7 @@ class Mapper {
         this.map = null;
 
         // Style for map container
-        this.style = `
-            display: block;
-            position: absolute;
-            top:0;
-            left: 0;
-            height: 100vh;
-            width: 100vw;
-            margin: 0;
-        `;
+        this.style = "display: block; position: absolute; top:0; left: 0; height: 100vh; width: 100vw; margin: 0;";
 
         // API URL for geocoding
         this.lookup_api = lookup_api
@@ -135,38 +136,34 @@ class Mapper {
         }
     }
 
-    async #add_marker(lat, long, alt, popup, icon_config=null) {
-        let icon_element = null;
-        if ( icon_config ) {
-            const {icon_url, icon_x=50, icon_y=100, icon_w=100, icon_h=100} = icon_config;
-
-            icon_element = new L.icon(
-                {
-                    iconUrl: icon_url,
-                    iconSize: [icon_w, icon_h],
-                    iconAnchor: [icon_x, icon_y]
-                }
-            );
-        }
-
+    async #add_marker(lat, long, alt="Marker", popup="", icon_config=null) {
         const marker_options = {alt: alt};
-        if (icon_element) marker_options.icon = icon_element;
-
+        
+        const config = icon_config || this.marker_icon_config;
+        
+        if (config?.icon_url) {
+            const {icon_url, icon_x=35, icon_y=70, icon_w=70, icon_h=70} = config;
+            marker_options.icon = new L.icon({
+                iconUrl: icon_url,
+                iconSize: [icon_w, icon_h],
+                iconAnchor: [icon_x, icon_y]
+            });
+        }
+        
         const mark = new L.Marker([lat, long], marker_options);
         if (popup !== "") mark.bindTooltip(popup);
-
         mark.addTo(this.map);
     }
 
-    async add_marker(lat, long, alt="Marker", popup="", icon=null) {
-        await this.#add_marker(lat, long, alt, popup, icon);
+    async add_marker(lat, long, alt="Marker", popup="", icon_config=null) {
+        await this.#add_marker(lat, long, alt, popup, icon_config);
     }
 
-    async add_marker_list(marker_list) {
-        await this.#add_marker_list(marker_list);
+    async add_marker_list(marker_list, icon_config=null) {
+        await this.#add_marker_list(marker_list, icon_config);
     }
 
-    async #add_marker_list(marker_list) {
+    async #add_marker_list(marker_list, icon_config=null) {
         /**  
          * Take a list of markers and turn it into a list of Leaflet markers
          * Args:
@@ -177,7 +174,7 @@ class Mapper {
         }
 
         const results = await Promise.allSettled(
-            marker_list.map((m, i) => this.#process_marker(m, i))
+            marker_list.map((m, i) => this.#process_marker(m, i, icon_config))
         );
         
         const added = results.filter(r => r.status === 'fulfilled').length;
@@ -191,7 +188,7 @@ class Mapper {
         return results;
     }
 
-    async #process_marker(marker_data, index) {
+    async #process_marker(marker_data, index, icon_config=null) {
         /**  
          * Take a list of markers and turn it into a list of Leaflet markers
          * Args:
@@ -218,7 +215,7 @@ class Mapper {
                 if (isNaN(lat) || isNaN(long)) continue;
                 const popup = loc.name || "None";
                 markers.push(
-                    await this.#add_marker(lat, long, marker_data.address, popup)
+                    await this.#add_marker(lat, long, marker_data.address, popup, icon_config)
                 );
             }
             return markers;
@@ -232,7 +229,9 @@ class Mapper {
         if (isNaN(lat) || isNaN(long)) {
             throw new Error(`Marker ${index}: invalid coords`);
         }
-        return this.#add_marker(lat, long, alt, popup, icon);
+        
+        if ( icon && Object.keys(icon).length > 0 ) icon_config = icon;
+        return this.#add_marker(lat, long, alt, popup, icon_config);
     }
     
     async #draw_from_json(json_string) {
